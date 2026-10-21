@@ -1,169 +1,93 @@
-
 import gradio as gr
 
 
-def create_study_plan(goal, topics_text, available_minutes, priorities_text):
-    if not goal or not goal.strip():
-        return "Please enter your study goal."
+def studyflow_alexa(message, history):
+    message = message.lower().strip()
+
+    if any(word in message for word in ["45 minutes", "45 min", "only 45"]):
+        minutes = 45
+    elif any(word in message for word in ["1 hour", "one hour", "60 minutes"]):
+        minutes = 60
+    elif any(word in message for word in ["2 hours", "two hours", "120 minutes"]):
+        minutes = 120
+    else:
+        minutes = 90
 
     topics = [
-        t.strip()
-        for t in topics_text.replace(",", "\n").splitlines()
-        if t.strip()
+        "Wave Optics",
+        "Photoelectric Effect",
+        "De Broglie Wavelength",
+        "Numerical Problems"
     ]
 
-    if not topics:
-        return "Please enter at least one topic."
+    priorities = {
+        "Wave Optics": "High",
+        "Photoelectric Effect": "Medium",
+        "De Broglie Wavelength": "Low",
+        "Numerical Problems": "High"
+    }
 
-    if available_minutes < 15:
-        return "Please provide at least 15 minutes."
+    weights = {"High": 3, "Medium": 2, "Low": 1}
+    study_minutes = int(minutes * 0.9)
+    total_weight = sum(weights[priorities[t]] for t in topics)
 
-    priorities = {}
-
-    for line in priorities_text.splitlines():
-        if ":" in line:
-            topic, priority = line.split(":", 1)
-            priority = priority.strip().capitalize()
-
-            if priority not in ["High", "Medium", "Low"]:
-                priority = "Medium"
-
-            priorities[topic.strip().lower()] = priority
-
-    weights = []
-
-    for topic in topics:
-        priority = priorities.get(topic.lower(), "Medium")
-        weights.append({"High": 3, "Medium": 2, "Low": 1}[priority])
-
-    study_time = max(1, int(available_minutes * 0.9))
-    break_time = available_minutes - study_time
-    total_weight = sum(weights)
-
-    allocations = [
-        int(study_time * weight / total_weight)
-        for weight in weights
-    ]
-
-    remaining = study_time - sum(allocations)
-
-    for i in range(remaining):
-        allocations[i % len(allocations)] += 1
-
-    result = [
-        "# 📚 STUDYFLOW AI",
-        f"**Goal:** {goal}",
-        f"**Available time:** {available_minutes} minutes",
+    plan = [
+        "# 📚 StudyFlow AI",
+        "### Alexa+-style study planning simulation",
+        f"**Study time available:** {minutes} minutes",
         "",
-        "## Your personalized study plan",
-        ""
+        "## Your personalized study plan"
     ]
 
-    for i, topic in enumerate(topics):
-        priority = priorities.get(topic.lower(), "Medium")
-        result.append(
-            f"{i + 1}. **{topic}** — {allocations[i]} minutes "
-            f"({priority} priority)"
+    allocations = []
+    for topic in topics:
+        allocated = round(
+            study_minutes * weights[priorities[topic]] / total_weight
+        )
+        allocations.append(allocated)
+
+    # Ensure the allocated study minutes add up correctly.
+    difference = study_minutes - sum(allocations)
+    allocations[0] += difference
+
+    for topic, allocated in zip(topics, allocations):
+        plan.append(
+            f"- **{topic}:** {allocated} minutes "
+            f"({priorities[topic]} priority)"
         )
 
-    result.extend([
+    plan.extend([
         "",
-        f"☕ **Break and review:** {break_time} minutes",
+        f"☕ **Break and review:** {minutes - study_minutes} minutes",
         "",
-        "💡 Start with your highest-priority topic."
+        "💡 You can ask for a plan using 45 minutes, 1 hour, or 2 hours.",
+        "",
+        "*Prototype: rule-based planning; no real Alexa+ connection or "
+        "generative AI is implemented.*"
     ])
 
-    return "\n".join(result)
+    return "\n".join(plan)
 
 
-def update_plan(goal, topics, minutes, priorities):
-    return "🔄 Updated plan\n\n" + create_study_plan(
-        goal, topics, minutes, priorities
+with gr.Blocks(
+    theme=gr.themes.Soft(),
+    title="StudyFlow AI | Alexa+ Demo"
+) as app:
+    gr.Markdown("""
+    # 📚 StudyFlow AI
+    ### An Alexa+-style study planning simulation
+
+    Describe your available study time to generate a personalized plan.
+    """)
+
+    gr.ChatInterface(
+        fn=studyflow_alexa,
+        title="Study Assistant",
+        description=(
+            'Try: "I have 2 hours to prepare for Physics" '
+            'or "I only have 45 minutes left."'
+        )
     )
-
-
-with gr.Blocks(title="StudyFlow AI", theme=gr.themes.Soft()) as demo:
-    gr.Markdown(
-        """
-        # 📚 StudyFlow AI
-        ### Your personal study planning companion
-
-        Create a study schedule based on your goals, time, and priorities.
-        """
-    )
-
-    with gr.Row():
-        with gr.Column():
-            goal = gr.Textbox(
-                label="Study goal",
-                value="Prepare for my Physics exam"
-            )
-
-            topics = gr.Textbox(
-                label="Topics (one per line)",
-                value=(
-                    "Wave Optics\n"
-                    "Photoelectric Effect\n"
-                    "De Broglie Wavelength\n"
-                    "Numerical Problems"
-                ),
-                lines=5
-            )
-
-            minutes = gr.Slider(
-                minimum=15,
-                maximum=480,
-                value=180,
-                step=15,
-                label="Available study time (minutes)"
-            )
-
-            priorities = gr.Textbox(
-                label="Topic priorities",
-                value=(
-                    "Wave Optics: High\n"
-                    "Photoelectric Effect: Medium\n"
-                    "De Broglie Wavelength: Low\n"
-                    "Numerical Problems: High"
-                ),
-                lines=4
-            )
-
-            generate = gr.Button(
-                "✨ Generate Study Plan",
-                variant="primary"
-            )
-
-            adapt = gr.Button("🔄 Adapt Study Plan")
-
-        with gr.Column():
-            output = gr.Markdown(
-                label="Your study plan"
-            )
-
-    inputs = [goal, topics, minutes, priorities]
-
-    generate.click(
-        fn=create_study_plan,
-        inputs=inputs,
-        outputs=output
-    )
-
-    adapt.click(
-        fn=update_plan,
-        inputs=inputs,
-        outputs=output
-    )
-
-    gr.Markdown(
-        """
-        ---
-        **Prototype:** Python + Gradio  
-        **Planning method:** Rule-based time allocation  
-        **AI model and voice recognition:** Not yet implemented
-        """
-    )
-
 
 if __name__ == "__main__":
-    demo.launch()
+    app.launch()
